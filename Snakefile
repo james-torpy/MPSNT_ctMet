@@ -10,17 +10,17 @@ home_dir = '/share/ScratchGeneral/jamtor/'
 project_dir = home_dir + 'projects/' + project_name + '/'
 script_dir = project_dir + 'scripts/'
 
-# deine variables:
-#BETA_VALS = list(['0.35'])
+# define variables:
+#BETA_VALS = list(['0.45'])
 #PVALS = list(['1e-4'])
 #BG_CUTOFFS = list(['0.1'])
 #BLOOD_HYPOS = list(['0.1'])
-#BLOOD_HYPERS = list(['0.8'])
-BETA_VALS = list(['0.3', '0.35', '0.4'])
-PVALS = list(['1e-5', '1e-4'])
-BG_CUTOFFS = list(['0.1', '0.2'])
-BLOOD_HYPOS = list(['0.1', '0.2'])
-BLOOD_HYPERS = list(['0.8', '0.9'])
+#BLOOD_HYPERS = list(['0.9'])
+BETA_VALS = list(['0.45', '0.5'])
+PVALS = list(['1e-4', '1e-5'])
+BG_CUTOFFS = list(['0.2', '0.1'])
+BLOOD_HYPOS = list(['0.2', '0.1'])
+BLOOD_HYPERS = list(['0.9', '0.1'])
 
 #rule all:
 #    input:
@@ -44,8 +44,8 @@ rule all:
     input:
         expand(
             'results/beta_{beta_val}/pval_{pval}/background_{bg_cutoff}/' + 
-                'blood_hypo_{blood_hypo}/blood_hyper_{blood_hyper}/tables/' + 
-                'DMR_counts.txt',
+                'blood_hypo_{blood_hypo}/blood_hyper_{blood_hyper}/plots/' + 
+                'MPNST_hypomethylated_marker_probes.png',
             beta_val = BETA_VALS, pval = PVALS,
             bg_cutoff = BG_CUTOFFS, blood_hypo = BLOOD_HYPOS, 
             blood_hyper = BLOOD_HYPERS
@@ -54,8 +54,8 @@ rule all:
 rule find_DMR:
     output:
         'results/beta_{beta_val}/pval_{pval}/background_{bg_cutoff}/' + 
-            'blood_hypo_{blood_hypo}/blood_hyper_{blood_hyper}/tables/' + 
-            'DMR_counts.txt'
+            'blood_hypo_{blood_hypo}/blood_hyper_{blood_hyper}/plots/' + 
+            'MPNST_hypomethylated_marker_probes.png'
     shell:
         "mkdir -p logs/find_DMR/beta_{wildcards.beta_val}/pval_{wildcards.pval}/background_{wildcards.bg_cutoff}/" + 
             "blood_hypo_{wildcards.blood_hypo}/blood_hyper_{wildcards.blood_hyper}/; " + 

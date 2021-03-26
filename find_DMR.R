@@ -7,22 +7,22 @@ subset_mtx <- F
 # fetch other variables:
 args = commandArgs(trailingOnly=TRUE)
 
-#beta_cutoff <- args[1]
-#print(beta_cutoff)
-#pval_cutoff <- as.character(args[2])
-#background_cutoff <- args[3]
-#blood_cutoffs <- list(
-#  MPNST_hypermethylated = args[4],
-#  MPNST_hypomethylated = args[5]
-#)
-
-beta_cutoff <- 0.35
-pval_cutoff <- as.character("1e-4")
-background_cutoff <- 0.2
+beta_cutoff <- args[1]
+print(beta_cutoff)
+pval_cutoff <- as.character(args[2])
+background_cutoff <- args[3]
 blood_cutoffs <- list(
-  MPNST_hypermethylated = 0.2,
-  MPNST_hypomethylated = 0.8
+  MPNST_hypermethylated = args[4],
+  MPNST_hypomethylated = args[5]
 )
+
+#beta_cutoff <- 0.5
+#pval_cutoff <- as.character("1e-5")
+#background_cutoff <- 0.1
+#blood_cutoffs <- list(
+#  MPNST_hypermethylated = 0.1,
+#  MPNST_hypomethylated = 0.9
+#)
 
 # define and create directories:
 home_dir <- "/share/ScratchGeneral/jamtor/"
@@ -70,6 +70,7 @@ library(ggplot2)
 DMR_analysis <- dget(paste0(func_dir, "DMR_analysis.R"))
 DMR_filter <- dget(paste0(func_dir, "DMR_filter.R"))
 filter_background <- dget(paste0(func_dir, "filter_background.R"))
+fetch_DM_beta <- dget(paste0(func_dir, "fetch_DM_beta.R"))
 
 
 ####################################################################################
@@ -277,10 +278,10 @@ print(
 
 print(
   paste0(
-    "Filtering for canditates hypermethylated in MPNST with normal ", 
+    "Filtering for canditates hypermethylated in MPNST with median normal ", 
     "background level values < ", 
     background_cutoff, 
-    " and hypomethylated in MPNST with MPNST background values > ", 
+    " and hypomethylated in MPNST with median MPNST background values > ", 
     background_cutoff, "..."
   )
 )
@@ -449,95 +450,6 @@ print(
   )
 )
 
-
-####################################################################################
-### 4. Filter for probes DM in MPNST vs each normal ###
-####################################################################################
-
-# separate hyper and hypo dfs:
-DMR_list <- list(
-  hyper = lapply(DMR_blood_filt, function(x) x$hyper),
-  hypo = lapply(DMR_blood_filt, function(x) x$hypo)
-)
-
-# find DMR probes common to all normal tissue:
-DMR_probes <- lapply(DMR_list, function(x) {
-  lapply(x, rownames)
-})
-DMR_final_probes <- lapply(DMR_probes, function(x) {
-
-  if (exists("common_probes")) {
-    rm(common_probes)
-  }
-
-  for (i in 2:length(x)) {
-
-  	if (!exists("common_probes")) {
-  	  common_probes <- intersect(x[[i-1]], x[[i]])
-  	} else {
-  	  common_probes <- intersect(common_probes, x[[i]])
-  	}
-
-  }
-  return(common_probes)
-
-})
-
-# fetch final DM values:
-if (exists("DMR_final")) {
-  rm(DMR_final)
-}
-for (i in 1:length(DMR_list)) {
-
-  if (length(DMR_list[[i]]) > 0) {
-
-  	if (!exists("DMR_final")) {
-
-  	  DMR_final <- list(
-  	  	lapply(DMR_list[[i]], function(y) {
-          y[rownames(y) %in% DMR_final_probes[[i]],]
-        })
-      )
-      names(DMR_final) <- names(DMR_list)[i]
-
-  	} else {
-
-  	  DMR_final[[i]] <- lapply(DMR_list[[i]], function(y) {
-        y[rownames(y) %in% DMR_final_probes[[i]],]
-      })
-      names(DMR_final)[i] <- names(DMR_list)[i]
-
-  	}
-  	
-  }
-  
-}
-
-# record values:
-final_hyper <- unlist(
-  lapply(DMR_final$hyper, function(x) {
-    nrow(x)
-  })
-)
-
-final_hypo <- unlist(
-  lapply(DMR_final$hypo, function(x) {
-    nrow(x)
-  })
-)
-
-DMR_record <- rbind(
-  DMR_record,
-  rbind(final_hyper, final_hypo)
-)
-
-print(
-  paste0(
-  	final_hyper[16], " hypermethylated and ", final_hypo[16],
-  	" hypomethylated final candiates identified!"
-  )
-)
-
 # save as table:
 write.table(
   DMR_record,
@@ -549,57 +461,63 @@ write.table(
 
 
 ####################################################################################
-### 6. Plot candidates ###
+### 5. Plot candidates ###
 ####################################################################################
-# write function to fetch mean beta values of all tissues:
-fetch_DM_beta <- function(
-  DMR_obj
-) {
 
-  # fetch normal mean beta vals:
-  mean_beta_list <- lapply(DMR_obj, function(y) {
+# put all hyper and all hypo candidates in list element each:
+for (i in 1:length(DMR_blood_filt)) {
 
-    y_sub <- y[,grep("mean.*non.malig", colnames(y))]
-    return(
-      data.frame(
-        row.names = rownames(y),
-        non_malig = y_sub[, grep("minus", colnames(y_sub), invert = T)]
-      )
+  if (i==1) {
+
+    DMR_final <- list(
+      hyper = list(DMR_blood_filt[[i]]$hyper),
+      hypo = list(DMR_blood_filt[[i]]$hypo)
     )
+    names(DMR_final$hyper) <- names(DMR_blood_filt)[i]
+    names(DMR_final$hypo) <- names(DMR_blood_filt)[i]
 
-  })
-
-  # fetch MPNST mean beta vals:
-  mean_beta_list$MPNST <- data.frame(
-  	row.names = rownames(DMR_obj[[1]]),
-  	MPNST = DMR_obj[[1]][
-      , colnames(DMR_obj[[1]]) == "mean.MPNST"
-    ]
-  )
-
-  # remove elements with no DM probes:
-  mean_beta_list <- mean_beta_list[lapply(mean_beta_list, nrow) > 0]
-
-  # merge to dataframe:
-  if (length(mean_beta_list) > 0) {
-  	mean_beta <- do.call("cbind", mean_beta_list)
-    colnames(mean_beta) <- names(mean_beta_list)
-  
-    # add probe column and melt for plotting:
-    mean_beta$probe <- rownames(mean_beta)
-    return(melt(mean_beta))
   } else {
-  	return(NULL)
+
+    DMR_final$hyper[[i]] <- DMR_blood_filt[[i]]$hyper
+    DMR_final$hypo[[i]] <- DMR_blood_filt[[i]]$hypo
+    names(DMR_final$hyper)[i] <- names(DMR_blood_filt)[i]
+    names(DMR_final$hypo)[i] <- names(DMR_blood_filt)[i]
+    
   }
 
 }
 
-# fetch mean beta values of all tissues:
-DMR_plot_dfs <- lapply(DMR_final, fetch_DM_beta)
+# fetch positions of each probe:
+probe_coords <- normal_se[[1]]@rowRanges
+
+# calculate mean values for all probes and tissues:
+all_mean_beta <- lapply(normal_mtx, function(x) {
+  return(apply(x, 1, mean, na.rm = T))
+})
+all_mean_beta$MPNST <- apply(MPNST_beta_df, 1, mean, na.rm = T)
+
+# fetch mean beta values and coords for DM probes and plot:
+DMR_plot_df <- lapply(
+  DMR_final,
+  fetch_DM_beta,
+  all_mean_beta,
+  probe_coords
+)
 
 # create line plot:
-p <- ggplot(DMR_plot_dfs$hypo, aes(x=probe, y=value, group=variable, color=variable))
+p <- ggplot(
+  DMR_plot_df$hypo, 
+  aes(x=probe, y=beta, group=tissue, color=tissue)
+)
 p <- p + geom_line()
+
+png(
+  paste0(
+    plot_dir, "MPNST_hypomethylated_marker_probes.png"
+  )
+)
+  p
+dev.off()
 
 ggsave(
   paste0(plot_dir, "MPNST_hypomethylated_marker_probes.pdf"),
@@ -608,94 +526,94 @@ ggsave(
 )
 
 
-####################################################################################
-### 5. Identify stringent DMRs ###
-####################################################################################
-
-# filter matrices for common probes:
-normal_mtx <- lapply(normal_mtx, function(x) {
-  return(x[rownames(MPNST_beta_df), ])
-})
-
-MPNST_beta_df <- MPNST_beta_df[rownames(normal_mtx[[1]]), ]
-
-# cbind MPNST and normal beta values:
-all_beta <- c(
-  normal_mtx,
-  list(MPNST_beta_df)
-)
-names(all_beta)[length(all_beta)] <- "MPNST"
-
-# identify methylation probes with mean beta values < 0.05 and others > 0.8:
-fringe_beta <- lapply(all_beta, function(x) { 
-
-  mean_beta <- apply(x, 1, mean, na.rm = TRUE)
-
-  low_beta <- names(mean_beta[mean_beta < 0.2])
-  print(
-  	paste0(
-  	  "No. low beta vals = ", length(low_beta), " out of ",
-  	  length(mean_beta)
-  	)
-  )
-
-  high_beta <- names(mean_beta[mean_beta > 0.8])
-  print(
-  	paste0(
-  	  "No. high beta vals = ", length(high_beta), " out of ",
-  	  length(mean_beta)
-  	)
-  )
-
-  return(
-  	list(
-  	  low_beta = low_beta,
-  	  high_beta = high_beta
-  	)
-  )
-
-})
-
-# fetch list of probes with mean beta values < 0.05 in one tissue and > 0.8 
-# in other tissue:
-dm_ind <- list(
-  MPNST_high = which(
-    fringe_beta$MPNST$high_beta %in% fringe_beta$BRCA$low_beta
-  ),
-  MPNST_low = which(
-    fringe_beta$MPNST$low_beta %in% fringe_beta$BRCA$high_beta
-  )
-)
-
-dm_probes <- list(
-  MPNST_high = fringe_beta$MPNST$high_beta[dm_ind$MPNST_high],
-  MPNST_low = fringe_beta$MPNST$low_beta[dm_ind$MPNST_low]
-)
-
-# isolate only candidate regions of > 1 DM probes:
-DMR <- lapply(dm_ind, function(x) {
-
-  splt <- split(
-    x, 
-    cumsum(
-    	seq_along(x) %in% (which(diff(x)>1)+1)
-    )
-  )
-
-  dm_regions <- lapply(splt, function(x) {
-
-    if (length(x) > 1) {
-    	return(x)
-    } else {
-    	return(NULL)
-    }
-
-  })
-  return(
-  	dm_regions[
-      !sapply(dm_regions, is.null)
-    ]
-  )
-
-})
+#####################################################################################
+#### 5. Identify stringent DMRs ###
+#####################################################################################
+#
+## filter matrices for common probes:
+#normal_mtx <- lapply(normal_mtx, function(x) {
+#  return(x[rownames(MPNST_beta_df), ])
+#})
+#
+#MPNST_beta_df <- MPNST_beta_df[rownames(normal_mtx[[1]]), ]
+#
+## cbind MPNST and normal beta values:
+#all_beta <- c(
+#  normal_mtx,
+#  list(MPNST_beta_df)
+#)
+#names(all_beta)[length(all_beta)] <- "MPNST"
+#
+## identify methylation probes with mean beta values < 0.05 and others > 0.8:
+#fringe_beta <- lapply(all_beta, function(x) { 
+#
+#  mean_beta <- apply(x, 1, mean, na.rm = TRUE)
+#
+#  low_beta <- names(mean_beta[mean_beta < 0.2])
+#  print(
+#  	paste0(
+#  	  "No. low beta vals = ", length(low_beta), " out of ",
+#  	  length(mean_beta)
+#  	)
+#  )
+#
+#  high_beta <- names(mean_beta[mean_beta > 0.8])
+#  print(
+#  	paste0(
+#  	  "No. high beta vals = ", length(high_beta), " out of ",
+#  	  length(mean_beta)
+#  	)
+#  )
+#
+#  return(
+#  	list(
+#  	  low_beta = low_beta,
+#  	  high_beta = high_beta
+#  	)
+#  )
+#
+#})
+#
+## fetch list of probes with mean beta values < 0.05 in one tissue and > 0.8 
+## in other tissue:
+#dm_ind <- list(
+#  MPNST_high = which(
+#    fringe_beta$MPNST$high_beta %in% fringe_beta$BRCA$low_beta
+#  ),
+#  MPNST_low = which(
+#    fringe_beta$MPNST$low_beta %in% fringe_beta$BRCA$high_beta
+#  )
+#)
+#
+#dm_probes <- list(
+#  MPNST_high = fringe_beta$MPNST$high_beta[dm_ind$MPNST_high],
+#  MPNST_low = fringe_beta$MPNST$low_beta[dm_ind$MPNST_low]
+#)
+#
+## isolate only candidate regions of > 1 DM probes:
+#DMR <- lapply(dm_ind, function(x) {
+#
+#  splt <- split(
+#    x, 
+#    cumsum(
+#    	seq_along(x) %in% (which(diff(x)>1)+1)
+#    )
+#  )
+#
+#  dm_regions <- lapply(splt, function(x) {
+#
+#    if (length(x) > 1) {
+#    	return(x)
+#    } else {
+#    	return(NULL)
+#    }
+#
+#  })
+#  return(
+#  	dm_regions[
+#      !sapply(dm_regions, is.null)
+#    ]
+#  )
+#
+#})
 

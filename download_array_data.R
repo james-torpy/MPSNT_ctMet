@@ -5,7 +5,7 @@ library(TCGAbiolinks)
 library(SummarizedExperiment)
 
 home_dir <- "/share/ScratchGeneral/jamtor/"
-project_dir <- paste0(home_dir, "projects/MPSNT_ctMet/")
+project_dir <- paste0(home_dir, "projects/MPNST_ctMet/")
 raw_dir <- paste0(project_dir, "raw_files/")
 Robject_dir <- paste0(raw_dir, "Rdata/")
 
@@ -257,10 +257,6 @@ if (!(file.exists(paste0(Robject_dir, "all_beta_3.Rdata")))) {
     moss_beta$inf450k,
     moss_beta$epic[rownames(moss_beta$epic) %in% rownames(moss_beta$inf450k),]
   )
-
-
-
-  
 
   # isolate MPNST samples only:
   moss_pheno <- lapply(moss_pheno, function(x) {
