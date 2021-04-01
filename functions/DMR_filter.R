@@ -6,9 +6,9 @@ DMR_filter <- function(
 
   # filter probes by methylation difference and p-values:
   filt <- dmr[
-    dmr[grep("p.value.adj", colnames(dmr))] < 10e-5 &
-    (dmr[grep("minus", colnames(dmr))] >= 0.35 |
-    dmr[grep("minus", colnames(dmr))] <= -0.35),
+    dmr[grep("p.value.adj", colnames(dmr))] < pval_cutoff &
+    (dmr[grep("minus", colnames(dmr))] >= beta_cutoff |
+    dmr[grep("minus", colnames(dmr))] <= -beta_cutoff),
   ]
   
   # identify probes either hyper- or hypo-methylated in MPNST vs normal:

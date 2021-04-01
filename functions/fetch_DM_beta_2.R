@@ -1,6 +1,6 @@
 fetch_DM_beta <- function(
   DMR_obj,
-  plot_beta_stats,
+  beta_stats,
   probe_coords,
   tissue_key
 ) {
@@ -10,17 +10,17 @@ fetch_DM_beta <- function(
   library(naturalsort)
 
   # fetch normal beta stats:
-  for (j in 1:length(plot_beta_stats)) {
+  for (j in 1:length(beta_stats)) {
 
     # isolate probes DM in all non malig:
     DM_stats <- as.data.frame(
-      plot_beta_stats[[j]][
-        rownames(plot_beta_stats[[j]]) %in% 
+      beta_stats[[j]][
+        rownames(beta_stats[[j]]) %in% 
         DMR_obj$probe,
       ]
     )
     DM_stats$probe <- rownames(DM_stats)
-    DM_stats$tissue <- names(plot_beta_stats)[j]
+    DM_stats$tissue <- names(beta_stats)[j]
 
     # return as df:
     if (j==1) {
@@ -30,7 +30,7 @@ fetch_DM_beta <- function(
     }
       
   }
-  names(DM_stats_list) <- names(plot_beta_stats)
+  names(DM_stats_list) <- names(beta_stats)
 
   # merge to dataframe:
   if (nrow(DM_stats_list[[1]]) > 0) {
@@ -73,21 +73,16 @@ fetch_DM_beta <- function(
     # add NF scores:
     colnames(DM_stats)[3] <- "quart_0.1"
     colnames(DM_stats)[4] <- "quart_0.9"
-    colnames(DM_stats)[6] <- "quart_0.25"
-    colnames(DM_stats)[7] <- "quart_0.75"
     DM_stats <- arrange(DM_stats, chr, coord)
     temp_df <- DM_stats[!duplicated(DM_stats$probe),]
     DM_stats <- rbind(
       DM_stats,
       data.frame(
-        probe = temp_df$probe,
+        probe = DMR_obj$probe,
         mean = DMR_obj$score,
         quart_0.1 = NA,
         quart_0.9 = NA,
         sd = NA,
-        quart_0.25 = NA,
-        quart_0.75 = NA,
-        median = DMR_obj$score,
         tissue = rep("NF", nrow(temp_df)),
         chr = temp_df$chr,
         coord = temp_df$coord
