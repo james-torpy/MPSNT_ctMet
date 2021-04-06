@@ -2,39 +2,39 @@
 # define parameters
 min_sample_per_probe <- 5
 min_beta_val <- 0.2
-subset_mtx <- F
+subset_data <- TRUE
 
-# fetch other variables:
-args = commandArgs(trailingOnly=TRUE)
-
-beta_cutoff <- args[1]
-print(beta_cutoff)
-pval_cutoff <- as.character(args[2])
-background_cutoff <- args[3]
-blood_cutoffs <- list(
-  MPNST_hypermethylated = args[4],
-  MPNST_hypomethylated = args[5]
-)
-NF_cutoffs <- list(
-  MPNST_hypermethylated = args[6],
-  MPNST_hypomethylated = args[7]
-)
-check_indiv_tissue <- as.logical(args[8])
-plot_min_sample_no <- as.numeric(args[9])
-
-#beta_cutoff <- 0.35
-#pval_cutoff <- as.character("1e-5")
-#background_cutoff <- 0.2
+## fetch other variables:
+#args = commandArgs(trailingOnly=TRUE)
+#
+#beta_cutoff <- args[1]
+#print(beta_cutoff)
+#pval_cutoff <- as.character(args[2])
+#background_cutoff <- args[3]
 #blood_cutoffs <- list(
-#  MPNST_hypermethylated = 0.2,
-#  MPNST_hypomethylated = 0.8
+#  MPNST_hypermethylated = args[4],
+#  MPNST_hypomethylated = args[5]
 #)
 #NF_cutoffs <- list(
-#  MPNST_hypermethylated = 0.2,
-#  MPNST_hypomethylated = 0.8
+#  MPNST_hypermethylated = args[6],
+#  MPNST_hypomethylated = args[7]
 #)
-#check_indiv_tissue <- as.logical("FALSE")
-#plot_min_sample_no <- 10
+#check_indiv_tissue <- as.logical(args[8])
+#plot_min_sample_no <- as.numeric(args[9])
+
+beta_cutoff <- 0.35
+pval_cutoff <- as.character("1e-5")
+background_cutoff <- 0.2
+blood_cutoffs <- list(
+  MPNST_hypermethylated = 0.2,
+  MPNST_hypomethylated = 0.8
+)
+NF_cutoffs <- list(
+  MPNST_hypermethylated = 0.2,
+  MPNST_hypomethylated = 0.8
+)
+check_indiv_tissue <- as.logical("FALSE")
+plot_min_sample_no <- 10
 
 print(paste0("beta_cutoff = ", beta_cutoff))
 print(paste0("pval_cutoff = ", pval_cutoff))
@@ -72,36 +72,36 @@ project_dir <- paste0(home_dir, "projects/MPNST_ctMet/")
 raw_dir <- paste0(project_dir, "raw_files/")
 script_dir <- paste0(project_dir, "scripts/")
 func_dir <- paste0(script_dir, "functions/")
-col_dir <- paste0(home_dir, "R/colour_palettes/")
 genome_dir <- paste0(project_dir, "genome/")
+ref_dir <- paste0(project_dir, "refs/")
 
 normal_in <- paste0(raw_dir, "TCGA_normal/")
 Robject_in <- paste0(raw_dir, "Rdata/")
 result_dir <- paste0(project_dir, "results/")
-out_dir <- paste0(
-  result_dir, "/",
-  "beta_", beta_cutoff, "/",
+out_path <- paste0(
+  result_dir,
+  "beta_", beta_cutoff, "_",
   "pval_", pval_cutoff, "/",
   "background_", background_cutoff, "/",
-  "blood_hypo_", blood_cutoffs$MPNST_hypermethylated, "/",
+  "blood_hypo_", blood_cutoffs$MPNST_hypermethylated, "_",
   "blood_hyper_", blood_cutoffs$MPNST_hypomethylated, "/"
 )
 
 if (!is.na(NF_cutoffs[1])) {
-  out_dir <- paste0(
-  	out_dir, "NF_hypo_", NF_cutoffs$MPNST_hypermethylated,
-  	"/NF_hyper_", NF_cutoffs$MPNST_hypomethylated, "/"
+  out_path <- paste0(
+  	out_path, "NF_hypo_", NF_cutoffs$MPNST_hypermethylated,
+  	"_NF_hyper_", NF_cutoffs$MPNST_hypomethylated, "/"
   )
 }
 
-if (subset_mtx) {
+if (subset_data) {
   result_dir <- paste0(result_dir, "subset/")
-  out_dir <- paste0(out_dir, "subset/")
+  out_path <- paste0(out_path, "subset/")
 }
 
 Robject_dir <- paste0(result_dir, "Rdata/")
-plot_dir <- paste0(out_dir, "plots/")
-table_dir <- paste0(out_dir, "tables/")
+plot_dir <- paste0(out_path, "plots/")
+table_dir <- paste0(out_path, "tables/")
 
 system(paste0("mkdir -p ", Robject_dir))
 system(paste0("mkdir -p ", plot_dir))
@@ -109,9 +109,8 @@ system(paste0("mkdir -p ", table_dir))
 
 print(
   paste0(
-    "Output candidate plots are ", 
-    plot_dir, "MPNST_hypomethylated_marker_probes.png & ",
-    plot_dir, "MPNST_hypermethylated_marker_probes.png"
+    "Output candidate plots are in ", 
+    plot_dir
   )
 )
 
@@ -128,11 +127,15 @@ library(rtracklayer)
 
 DMR_analysis <- dget(paste0(func_dir, "DMR_analysis.R"))
 DMR_filter <- dget(paste0(func_dir, "DMR_filter.R"))
-filter_background <- dget(paste0(func_dir, "filter_background.R"))
+background_filter <- dget(paste0(func_dir, "background_filter.R"))
+record_vals <- dget(paste0(func_dir, "record_vals.R"))
+blood_filter <- dget(paste0(func_dir, "blood_filter.R"))
+annotate_probes <- dget(paste0(func_dir, "annotate_probes.R"))
+filter_by_NF <- dget(paste0(func_dir, "filter_by_NF.R"))
 fetch_DM_beta <- dget(paste0(func_dir, "fetch_DM_beta.R"))
 
 col_pal <- read.table(
-  paste0(col_dir, "labelled_colour_palette_2.txt"),
+  paste0(ref_dir, "custom_colour_palette.txt"),
   sep = "\t",
   header = F,
   comment.char = ""
@@ -149,6 +152,10 @@ if (!file.exists(paste0(Robject_dir, "normal_se_object.Rdata"))) {
 
   # load normal se objects:
   normal_se_files <- list.files(normal_in, pattern = "rda")
+
+  if (subset_data) {
+    normal_se_files <- normal_se_files[1]
+  }
   
   for (i in 1:length(normal_se_files)) {
   
@@ -209,8 +216,15 @@ for (i in 1:length(orig_normal_mtx)) {
 
   }
 }
-normal_mtx <- orig_normal_mtx[!(names(orig_normal_mtx) %in% to_rm)]
-normal_mtx$mixed <- mixed_mtx
+
+if (exists("to_rm")) {
+  normal_mtx <- orig_normal_mtx[
+    !(names(orig_normal_mtx) %in% to_rm)
+  ]
+  normal_mtx$mixed <- mixed_mtx
+} else {
+  normal_mtx <- orig_normal_mtx
+}
 
 # add all normal matrix:
 normal_mtx$all <- do.call("cbind", normal_mtx)
@@ -230,32 +244,37 @@ names(normal_mtx) <- paste0(
 print("Loading MPNST beta values...")
 
 # Load MPNST beta values:
-MPNST_beta_df <- readRDS(paste0(Robject_in, "MPNST_beta_df.Rdata"))
+MPNST_df <- readRDS(paste0(Robject_in, "MPNST_beta_df.Rdata"))
 
 # label columns:
-colnames(MPNST_beta_df) <- paste0(colnames(MPNST_beta_df), "-MPNST")
+colnames(MPNST_df) <- paste0(colnames(MPNST_df), "-MPNST")
 
-if (subset_mtx) {
+if (subset_data) {
 
-  normal_mtx <- lapply(normal_mtx, function(x) x[1:100,])
+  normal_mtx <- lapply(normal_mtx, function(x) x[1:40000,])
 
-  MPNST_beta_df <- MPNST_beta_df[1:100,]
+  MPNST_df <- MPNST_df[1:40000,]
 
 }
 
 # find DMRs between each group and MPNST groups:
-if (!file.exists(paste0(Robject_dir, "MPNST_vs_normal_groups.Rdata"))) {
+if (
+  !file.exists(
+    paste0(Robject_dir, "MPNST_vs_normal_groups.Rdata")
+  )
+) {
 	
   for (i in 1:length(normal_mtx)) {
 
   	print(
   	  paste0(
-  	  	"Identifying DM probes, MPNST vs ", names(normal_mtx)[i], "..."
+  	  	"Identifying DM probes, MPNST vs ", 
+        names(normal_mtx)[i], "..."
   	  )
   	)
 
     DMR <- DMR_analysis(
-      sample1_beta = MPNST_beta_df, 
+      sample1_beta = MPNST_df, 
       sample1_name = "MPNST", 
       sample2_beta = normal_mtx[[i]], 
       sample2_name = names(normal_mtx)[i],
@@ -286,41 +305,42 @@ if (!file.exists(paste0(Robject_dir, "MPNST_vs_normal_groups.Rdata"))) {
 }
 
 # record values:
-unfiltered_hyper <- unlist(
-  lapply(MPNST_vs_normal, function(x) {
-    nrow(
-    	x[x$status == "Hypermethylated in MPNST",]
-    )
-  })
+DMR_record <- as.data.frame(
+  rbind(
+    sapply(MPNST_vs_normal, function(x) {
+      nrow(
+        x[x$status == "Hypermethylated in MPNST",]
+      )
+    }), 
+    sapply(MPNST_vs_normal, function(x) {
+      nrow(
+        x[x$status == "Hypomethylated in MPNST",]
+      )
+    })
+  )
 )
-
-unfiltered_hypo <- unlist(
-  lapply(MPNST_vs_normal, function(x) {
-    nrow(
-    	x[x$status == "Hypomethylated in MPNST",]
-    )
-  })
-)
-
-DMR_record <- rbind(unfiltered_hypo, unfiltered_hyper)
+rownames(DMR_record) <- c("unfiltered_hyper", "unfiltered_hypo")
 
 print(
   paste0(
-    unfiltered_hyper[16], " hypermethylated and ", unfiltered_hypo[16],
-    " hypomethylated beta value/p-value filtered candiates identified..."
+    DMR_record["unfiltered_hyper",]$all_non_malig, 
+    " hypermethylated and ",
+    DMR_record["unfiltered_hypo",]$all_non_malig,
+    " hypomethylated unfiltered candiates ", 
+    "identified..."
   )
 )
 
 
 ####################################################################################
-### 2. Filter DM probes ###
+### 2. Filter DM probes by beta/pvals ###
 ####################################################################################
 
 print(
   paste0(
     "Filtering for canditates with at least ", 
     beta_cutoff, 
-    "beta value difference and < ", pval_cutoff, "p-value..."
+    " beta value difference and < ", pval_cutoff, "p-value..."
   )
 )
 
@@ -332,41 +352,23 @@ DMR_initial <- lapply(
 )
 
 # record values:
-beta_filt_hyper <- unlist(
-  lapply(DMR_initial, function(x) {
-    nrow(
-      x$hyper
-    )
-  })
-)
-
-beta_filt_hypo <- unlist(
-  lapply(DMR_initial, function(x) {
-    nrow(
-      x$hypo
-    )
-  })
-)
-
 DMR_record <- rbind(
   DMR_record,
-  rbind(beta_filt_hyper, beta_filt_hypo)
+  record_vals(DMR_initial, "beta_filt")
 )
+
+
+####################################################################################
+### 2. Filter DM probes for low background candidates ###
+####################################################################################
 
 print(
   paste0(
-  	beta_filt_hyper[16], " hypermethylated and ", beta_filt_hypo[16],
-  	" hypomethylated beta value/p-value filtered candiates identified..."
-  )
-)
-
-print(
-  paste0(
-    "Filtering for canditates hypermethylated in MPNST with median normal ", 
-    "background level values < ", 
+    "Filtering for canditates hypermethylated in MPNST with median ",
+    "normal background level values < ", 
     background_cutoff, 
-    " and hypomethylated in MPNST with median MPNST background values > ", 
-    background_cutoff, "..."
+    " and hypomethylated in MPNST with median MPNST background ", 
+    "values > ", background_cutoff, "..."
   )
 )
 
@@ -379,7 +381,7 @@ for (i in 1:length(DMR_initial)) {
       if (length(grep("Hypermethylated", x$status[1])) > 0) {
 
         return(
-          filter_background(
+          background_filter(
             dmr = x,
             background_cutoff,
             hypo_beta = normal_mtx[[i]],
@@ -390,10 +392,10 @@ for (i in 1:length(DMR_initial)) {
       } else {
   
         return(
-        filter_background(
+        background_filter(
             dmr = x,
             background_cutoff,
-            hypo_beta = MPNST_beta_df,
+            hypo_beta = MPNST_df,
             min_sample_per_probe
           )
         )
@@ -418,33 +420,9 @@ for (i in 1:length(DMR_initial)) {
 names(DMR_bg_filt) <- names(DMR_initial)
 
 # record values:
-bg_filt_hyper <- unlist(
-  lapply(DMR_bg_filt, function(x) {
-    nrow(
-      x$hyper
-    )
-  })
-)
-
-bg_filt_hypo <- unlist(
-  lapply(DMR_bg_filt, function(x) {
-    nrow(
-      x$hypo
-    )
-  })
-)
-
 DMR_record <- rbind(
   DMR_record,
-  rbind(bg_filt_hyper, bg_filt_hypo)
-)
-
-print(
-  paste0(
-  	bg_filt_hyper[["all_non_malig"]], " hypermethylated and ", 
-    bg_filt_hypo[["all_non_malig"]], " hypomethylated high ", 
-    "background filtered candiates identified..."
-  )
+  record_vals(DMR_bg_filt, "bg_filt")
 )
 
 
@@ -455,8 +433,24 @@ print(
 print("Loading blood beta values...")
 
 # load GEO blood data and fetch beta matrix:
-blood_se <- readRDS(paste0(raw_dir, "GEO_blood/SE_GEO_Meth_Data.rds"))
-blood_mtx <- assays(blood_se)[[1]][-1,]
+if (
+  !file.exists(
+    paste0(Robject_dir, "blood_mtx.Rdata")
+  )
+) {
+
+  blood_se <- readRDS(paste0(raw_dir, "GEO_blood/SE_GEO_Meth_Data.rds"))
+  blood_mtx <- assays(blood_se)[[1]][-1,]
+  
+  if (subset_data) {
+    blood_mtx <- blood_mtx[1:40000,]
+  }
+
+  saveRDS(blood_mtx, paste0(Robject_dir, "blood_mtx.Rdata"))
+
+} else {
+  blood_mtx <- readRDS(paste0(Robject_dir, "blood_mtx.Rdata"))
+}
 
 print(
   paste0(
@@ -471,84 +465,14 @@ print(
 # blood_cutoffs$MPNST_hypermethylated in blood, and hypomethylated probes with 
 # median beta values < blood_cutoffs$MPNST_hypomethylated in blood:
 DMR_blood_filt <- lapply(DMR_bg_filt, function(x) {
-
-	res <- lapply(x, function(y) {
-
-	  if (!is.na(y)) {
-
-	  	# fetch blood values for DM probes and ensure data for enough samples
-    	# for each probe:
-    	blood_beta <- blood_mtx[rownames(y),]
-    
-    	blood_beta <- blood_beta[
-          rowSums(!is.na(blood_beta)) > min_sample_per_probe,
-    	]
-  
-    	# calculate blood median values:
-    	blood_medians <- apply(
-          blood_beta, 
-          1, 
-          median,
-          na.rm = TRUE
-        )
-  
-   	    # filter out values above/below blood_cutoffs:
-   	    if (length(grep("Hypermethylated", y$status[1])) > 0) {
- 
-   	  	  filt_blood <- names(blood_medians)[
-   	  	    blood_medians < blood_cutoffs$MPNST_hypermethylated
-   	  	  ]
- 
-   	    } else {
- 
-   	  	  filt_blood <- names(blood_medians)[
-   	  	    blood_medians > blood_cutoffs$MPNST_hypomethylated
-   	  	  ]
- 
-   	    }
- 
-   	    return(y[filt_blood,])
-
-	  } else {
-
-	  	return(y)
-
-	  }
-
-	})
-	
-	return(res)
-  
+  return(lapply(x, blood_filter, blood_mtx, min_sample_per_probe))
 })
 
+
 # record values:
-blood_filt_hyper <- unlist(
-  lapply(DMR_blood_filt, function(x) {
-    nrow(
-      x$hyper
-    )
-  })
-)
-
-blood_filt_hypo <- unlist(
-  lapply(DMR_blood_filt, function(x) {
-    nrow(
-      x$hypo
-    )
-  })
-)
-
 DMR_record <- rbind(
   DMR_record,
-  rbind(blood_filt_hyper, blood_filt_hypo)
-)
-
-print(
-  paste0(
-  	blood_filt_hyper[["all_non_malig"]], " hypermethylated and ", 
-    blood_filt_hypo[["all_non_malig"]]," hypomethylated blood ",
-    "filtered candiates identified..."
-  )
+  record_vals(DMR_blood_filt, "blood_filt")
 )
 
 
@@ -558,88 +482,12 @@ print(
 
 if (check_indiv_tissue) {
 
-  # separate hyper and hypo dfs:
-  DMR_list <- list(
-    hyper = lapply(DMR_blood_filt, function(x) x$hyper),
-    hypo = lapply(DMR_blood_filt, function(x) x$hypo)
-  )
-  
-  # find DMR probes common to all normal tissue:
-  DMR_probes <- lapply(DMR_list, function(x) {
-    lapply(x, rownames)
-  })
-  DMR_indiv_probes <- lapply(DMR_probes, function(x) {
-  
-    if (exists("common_probes")) {
-      rm(common_probes)
-    }
-  
-    for (i in 2:length(x)) {
-  
-     if (!exists("common_probes")) {
-       common_probes <- intersect(x[[i-1]], x[[i]])
-     } else {
-       common_probes <- intersect(common_probes, x[[i]])
-     }
-  
-    }
-    return(common_probes)
-  
-  })
-  
-  # fetch indiv DM values:
-  if (exists("DMR_indiv")) {
-    rm(DMR_indiv)
-  }
-  for (i in 1:length(DMR_list)) {
-  
-    if (length(DMR_list[[i]]) > 0) {
-  
-     if (!exists("DMR_indiv")) {
-  
-       DMR_indiv <- list(
-         lapply(DMR_list[[i]], function(y) {
-            y[rownames(y) %in% DMR_indiv_probes[[i]],]
-          })
-        )
-        names(DMR_indiv) <- names(DMR_list)[i]
-  
-     } else {
-  
-       DMR_indiv[[i]] <- lapply(DMR_list[[i]], function(y) {
-          y[rownames(y) %in% DMR_indiv_probes[[i]],]
-        })
-        names(DMR_indiv)[i] <- names(DMR_list)[i]
-  
-     }
-     
-    }
-    
-  }
-  
+  DMR_indiv <- indiv_tissue_filter(DMR_blood_filt)
+
   # record values:
-  indiv_hyper <- unlist(
-    lapply(DMR_indiv$hyper, function(x) {
-      nrow(x)
-    })
-  )
-  
-  indiv_hypo <- unlist(
-    lapply(DMR_indiv$hypo, function(x) {
-      nrow(x)
-    })
-  )
-  
   DMR_record <- rbind(
     DMR_record,
-    rbind(indiv_hyper, indiv_hypo)
-  )
-  
-  print(
-    paste0(
-     indiv_hyper[16], " hypermethylated and ", indiv_hypo[16],
-     " hypomethylated final candiates identified"
-    )
+    record_vals(DMR_indiv, "indiv_filt")
   )
 
   prefinal_DMR <- DMR_indiv$all_non_malig
@@ -656,9 +504,15 @@ if (check_indiv_tissue) {
 ####################################################################################
 
 # load NF methylation bed file:
-if (!file.exists(paste0(Robject_dir, "NF_methylation_ranges.Rdata"))) {
+if (
+  !file.exists(
+    paste0(Robject_dir, "NF_methylation_ranges.Rdata")
+  )
+) {
 
-  NF_met <- import(paste0(raw_dir, "feber_2011/GSM541730_benign_batman.gff"))
+  NF_met <- import(
+    paste0(raw_dir, "feber_2011/GSM541730_benign_batman.gff")
+  )
   NF_gr <- GRanges(
     seqnames <- paste0("chr", seqnames(NF_met)),
     ranges <- ranges(NF_met),
@@ -669,128 +523,49 @@ if (!file.exists(paste0(Robject_dir, "NF_methylation_ranges.Rdata"))) {
   saveRDS(NF_gr, paste0(Robject_dir, "NF_methylation_ranges.Rdata"))
 
 } else {
-
-  NF_gr <- readRDS(paste0(Robject_dir, "NF_methylation_ranges.Rdata"))
-
+  NF_gr <- readRDS(
+    paste0(Robject_dir, "NF_methylation_ranges.Rdata")
+  )
 }
 
 # fetch positions of each probe:
 probe_coords <- normal_se[[1]]@rowRanges
 
 # annotate DMR dfs with probe info:
-prefinal_DMR <- lapply(prefinal_DMR, function(x) {
-
-  if (!is.na(x)) {
-
-    # make probe column:
-    x$probe <- rownames(x)
-    # fetch probe locations and add:
-    specific_coords <- probe_coords[
-      names(probe_coords) %in% x$probe
-    ]
-    return(
-      merge(
-        x,
-        data.frame(
-          probe = names(specific_coords),
-          chr = seqnames(specific_coords),
-          coord = start(specific_coords)
-        ),
-        by = "probe"
-      )
-    )
-
-  } else {
-    return(x)
-  }
-
-})
+prefinal_DMR <- lapply(prefinal_DMR, annotate_probes)
 
 # import gencode annot:
-gencode <- import(
-  paste0(genome_dir, "gencode.v19.annotation.gtf")
-)
+if (
+  !file.exists(
+    paste0(genome_dir, "gencode.v19.annotation.Rdata")
+  )
+) {
 
-# filter hypermethylated candidates for those hypomethylated in NF, and vice versa:
-for (i in 1:length(prefinal_DMR)) {
+  gencode <- import(
+    paste0(genome_dir, "gencode.v19.annotation.gtf")
+  )
 
-  if (nrow(prefinal_DMR[[i]]) > 0) {
+  saveRDS(
+    gencode, paste0(genome_dir, "gencode.v19.annotation.Rdata")
+  )
 
-    # convert DM probe df to granges object:
-    dm_gr <- GRanges(
-      seqnames = prefinal_DMR[[i]]$chr,
-      ranges = IRanges(
-        start = prefinal_DMR[[i]]$coord,
-        end = prefinal_DMR[[i]]$coord
-      ),
-      strand = "*"
-    )
-    values(dm_gr) <- subset(
-      prefinal_DMR[[i]], 
-      select = -c(chr, coord)
-    )
-
-    # find overlaps with genes and keep in separate gr:
-    gene_olaps <- findOverlaps(gencode, dm_gr)
-
-    if (i==1) {
-      DMR_genes <- list(
-      	hyper = gencode[queryHits(gene_olaps)]
-      )
-      DMR_genes$hyper$probe <- dm_gr$probe[subjectHits(gene_olaps)]
-    } else {
-      DMR_genes$hypo <- gencode[queryHits(gene_olaps)]
-      DMR_genes$hypo$probe <- dm_gr$probe[subjectHits(gene_olaps)]
-    }
-  
-    if (length(grep("Hyper", prefinal_DMR[[i]]$status[i])) > 0) {
-  
-      # isolate hypomethylated NF regions:
-      NF_spec <- NF_gr[NF_gr$score < NF_cutoffs$MPNST_hypermethylated,]
-  
-      # find overlaps with gr:
-      olaps <- findOverlaps(dm_gr, NF_spec)
-  
-    } else {
-  
-      # isolate hypermethylated NF regions:
-      NF_spec <- NF_gr[NF_gr$score > NF_cutoffs$MPNST_hypomethylated,]
-  
-      # find overlaps with gr:
-      olaps <- findOverlaps(dm_gr, NF_spec)
-  
-    }
-
-    # combine array and MeDIP data:
-    DMR_res <- as.data.frame(dm_gr[queryHits(olaps),])
-    DMR_res <- cbind(
-      DMR_res,
-      subset(values(NF_spec[subjectHits(olaps),]), select = score)
-    )
-  
-    # return filtered candidates:
-    if (i==1) {
-      DMR_final <- list(DMR_res)
-    } else {
-      DMR_final[[i]] <- DMR_res
-    }
-
-  } else {
-
-    if (i==1) {
-      DMR_final <- list(NULL)
-    } else {
-      DMR_final[[i]] <- NULL
-    }
-
-  }
-  
+} else {
+  gencode <- readRDS(
+    paste0(genome_dir, "gencode.v19.annotation.Rdata")
+  )
 }
-names(DMR_final) <- names(prefinal_DMR)
+
+# filter hypermethylated candidates for those hypomethylated in NF, 
+# and vice versa:
+final_DMR <- filter_by_NF(
+  dmr = prefinal_DMR,
+  NF_vals = NF_gr, 
+  gene_annot = gencode
+)
 
 print(
   paste0(
-   nrow(DMR_final$hyper), " hypermethylated and ", nrow(DMR_final$hypo),
+   nrow(final_DMR$hyper), " hypermethylated and ", nrow(final_DMR$hypo),
    " hypomethylated final candiates identified"
   )
 )
@@ -804,7 +579,7 @@ print(
 if (!file.exists(paste0(Robject_dir, "all_beta_stats.Rdata"))) {
 
   all_beta_df <- orig_normal_mtx
-  all_beta_df$MPNST <- MPNST_beta_df
+  all_beta_df$MPNST <- MPNST_df
   all_beta_df$blood <- blood_mtx
 
   all_beta_stats <- lapply(all_beta_df, function(x) {
@@ -882,7 +657,7 @@ n_vals <- c(
   unlist(lapply(orig_normal_mtx, ncol)),
   ncol(blood_mtx),
   as.character(10),
-  ncol(MPNST_beta_df)
+  ncol(MPNST_df)
 )
 names(n_vals)[length(n_vals)-2] <- "blood"
 names(n_vals)[length(n_vals)-1] <- "NF"

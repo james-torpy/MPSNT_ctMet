@@ -19,7 +19,9 @@ filter_background <- function(
     median_dm_beta <- apply(dm_beta, 1, median, na.rm = TRUE)
   
     # remove probes with median above background cutoff:
-    filt_dm <- names(median_dm_beta)[median_dm_beta <= background_cutoff]
+    filt_dm <- names(median_dm_beta)[
+      median_dm_beta <= background_cutoff
+    ]
   
     return(dmr[filt_dm,])
   } else {
