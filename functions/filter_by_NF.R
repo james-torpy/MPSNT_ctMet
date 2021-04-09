@@ -66,24 +66,29 @@ filter_by_NF <- function(
     
       # return filtered candidates:
       if (i==1) {
-        DMR_final <- list(DMR_res)
+        final_DMR <- list(DMR_res)
       } else {
-        DMR_final[[i]] <- DMR_res
+        final_DMR[[i]] <- DMR_res
       }
   
     } else {
   
       if (i==1) {
-        DMR_final <- list(NULL)
+        final_DMR <- list(NULL)
       } else {
-        DMR_final[[i]] <- NULL
+        final_DMR[[i]] <- NULL
       }
   
     }
     
   }
-  names(DMR_final) <- names(dmr)
+  names(final_DMR) <- names(dmr)
 
-  return(DMR_final)
+  return(
+    list(
+      final_DMR = final_DMR, 
+      DMR_genes = DMR_genes
+    )
+  )
 
 }

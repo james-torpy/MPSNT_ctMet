@@ -1,41 +1,95 @@
 fetch_DM_beta <- function(
-  DMR_obj,
-  plot_beta_stats,
+  dmr,
+  beta_val_list,
   probe_coords,
-  tissue_key
+  tissue_key,
+  n_vals,
+  plot_min_sample_no
 ) {
 
   library(reshape)
   library(dplyr)
   library(naturalsort)
 
-  # fetch normal beta stats:
-  for (j in 1:length(plot_beta_stats)) {
+  # fetch beta values for DM probes:
+  DM_combined <- do.call("rbind", dmr)
+  DM_probes <- DM_combined$probe
+  DM_beta <- lapply(beta_val_list, function(x) {
+    return(x[rownames(x) %in% DM_probes,])
+  })
 
-    # isolate probes DM in all non malig:
-    DM_stats <- as.data.frame(
-      plot_beta_stats[[j]][
-        rownames(plot_beta_stats[[j]]) %in% 
-        DMR_obj$probe,
-      ]
-    )
-    DM_stats$probe <- rownames(DM_stats)
-    DM_stats$tissue <- names(plot_beta_stats)[j]
+  # calculate stats on beta values:
+  for (j in 1:length(DM_beta)) {
 
-    # return as df:
     if (j==1) {
-      DM_stats_list <- list(DM_stats)
+
+      beta_stats <- list(
+        as.data.frame(
+          t(
+            apply(DM_beta[[j]], 1, function(y) {
+              # calculate mean, 10% and 90% quartiles:
+              quantiles <- quantile(
+                y, c(0.1, 0.25, 0.75, 0.9), na.rm = TRUE
+              )
+              return(
+                c(
+                  tissue = names(DM_beta)[j],
+                  median = median(y, na.rm = TRUE),
+                  mean = mean(y, na.rm = TRUE),
+                  sd = sd(y, na.rm = TRUE),
+                  quart_0.1 = quantiles[1],
+                  quart_0.25 = quantiles[2],
+                  quart_0.75 = quantiles[3],
+                  quart_0.9 = quantiles[4]
+                )
+              )
+            })
+          )
+        )
+      )
+
     } else {
-      DM_stats_list[[j]] <- DM_stats
+
+      beta_stats[[j]] <- as.data.frame(
+        t(
+          apply(DM_beta[[j]], 1, function(y) {
+            # calculate mean, 10% and 90% quartiles:
+            quantiles <- quantile(
+              y, c(0.1, 0.25, 0.75, 0.9), na.rm = TRUE
+            )
+            return(
+              c(
+                tissue = names(DM_beta)[j],
+                median = median(y, na.rm = TRUE),
+                mean = mean(y, na.rm = TRUE),
+                sd = sd(y, na.rm = TRUE),
+                quart_0.1 = quantiles[1],
+                quart_0.25 = quantiles[2],
+                quart_0.75 = quantiles[3],
+                quart_0.9 = quantiles[4]
+              )
+            )
+          })
+        )
+      )
+
     }
-      
+    # make probe column:
+    beta_stats[[j]]$probe <- rownames(beta_stats[[j]])
+
   }
-  names(DM_stats_list) <- names(plot_beta_stats)
+  names(beta_stats) <- names(DM_beta)
+
+  # filter out tissues with < 10 samples from beta stats:
+  rm_tissues <- names(n_vals)[as.numeric(n_vals) < plot_min_sample_no]
+  beta_stats <- beta_stats[
+    !(names(beta_stats) %in% rm_tissues)
+  ]
 
   # merge to dataframe:
-  if (nrow(DM_stats_list[[1]]) > 0) {
+  if (nrow(beta_stats[[1]]) > 0) {
 
-  	DM_stats <- do.call("rbind", DM_stats_list)
+  	DM_stats <- do.call("rbind", beta_stats)
   
     # fetch probe locations and add:
     specific_coords <- probe_coords[
@@ -70,34 +124,31 @@ fetch_DM_beta <- function(
       )
     )
 
+    # fix up column names:
+    colnames(DM_stats) <- sub(
+      '^([^.]+.[^.]+).*', 
+      '\\1', 
+      colnames(DM_stats)
+    )
     # add NF scores:
-    colnames(DM_stats)[3] <- "quart_0.1"
-    colnames(DM_stats)[4] <- "quart_0.9"
-    colnames(DM_stats)[6] <- "quart_0.25"
-    colnames(DM_stats)[7] <- "quart_0.75"
-    DM_stats <- arrange(DM_stats, chr, coord)
     temp_df <- DM_stats[!duplicated(DM_stats$probe),]
     DM_stats <- rbind(
       DM_stats,
       data.frame(
         probe = temp_df$probe,
-        mean = DMR_obj$score,
-        quart_0.1 = NA,
-        quart_0.9 = NA,
+        tissue = rep("NF", nrow(temp_df)),
+        median = DM_combined$score,
+        mean = DM_combined$score,
         sd = NA,
+        quart_0.1 = NA,
         quart_0.25 = NA,
         quart_0.75 = NA,
-        median = DMR_obj$score,
-        tissue = rep("NF", nrow(temp_df)),
+        quart_0.9 = NA,
         chr = temp_df$chr,
         coord = temp_df$coord
       )
     )
     DM_stats <- arrange(DM_stats, chr, coord)
-
-    # add column for each x position:
-    DM_stats$x_pos <- factor(DM_stats$probe)
-    levels(DM_stats$x_pos) <- 1:length(unique(DM_stats$x_pos))
 
     # add column to make NF points different shape:
     DM_stats$shape <- "non_malignant"
@@ -109,7 +160,24 @@ fetch_DM_beta <- function(
     DM_stats$shape <- factor(DM_stats$shape)
     DM_stats$shape <- relevel(DM_stats$shape, "non_malignant")
 
-    return(DM_stats)
+    # convert stats into numeric values:
+    for (
+      k in which(
+        colnames(DM_stats) == "median"
+      ):which(
+        colnames(DM_stats) == "quart_0.9"
+      )
+    ) {
+      DM_stats[ ,k] <- round(as.numeric(DM_stats[ ,k]), 3)
+    }
+    
+    # resplit into hyper and hypo candidates:
+    split_stats <- list(
+      hyper = DM_stats[DM_stats$probe %in% dmr$hyper$probe,],
+      hypo = DM_stats[DM_stats$probe %in% dmr$hypo$probe,]
+    )
+
+    return(split_stats)
 
   } else {
   	return(NULL)

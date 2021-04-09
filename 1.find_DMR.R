@@ -124,6 +124,7 @@ library(SummarizedExperiment)
 library(ggplot2)
 library(cowplot)
 library(rtracklayer)
+library(data.table)
 
 DMR_analysis <- dget(paste0(func_dir, "DMR_analysis.R"))
 DMR_filter <- dget(paste0(func_dir, "DMR_filter.R"))
@@ -133,6 +134,7 @@ blood_filter <- dget(paste0(func_dir, "blood_filter.R"))
 annotate_probes <- dget(paste0(func_dir, "annotate_probes.R"))
 filter_by_NF <- dget(paste0(func_dir, "filter_by_NF.R"))
 fetch_DM_beta <- dget(paste0(func_dir, "fetch_DM_beta.R"))
+plot_DMR <- dget(paste0(func_dir, "plot_DMR.R"))
 
 col_pal <- read.table(
   paste0(ref_dir, "custom_colour_palette.txt"),
@@ -557,148 +559,21 @@ if (
 
 # filter hypermethylated candidates for those hypomethylated in NF, 
 # and vice versa:
-final_DMR <- filter_by_NF(
+final_DMR_and_genes <- filter_by_NF(
   dmr = prefinal_DMR,
   NF_vals = NF_gr, 
   gene_annot = gencode
 )
+final_DMR <- final_DMR_and_genes$final_DMR
+DMR_genes <- final_DMR_and_genes$DMR_genes
 
-print(
-  paste0(
-   nrow(final_DMR$hyper), " hypermethylated and ", nrow(final_DMR$hypo),
-   " hypomethylated final candiates identified"
-  )
-)
-
-
-####################################################################################
-### 6. Prepare plot data ###
-####################################################################################
-
-# calculate mean values for all probes and tissues:
-if (!file.exists(paste0(Robject_dir, "all_beta_stats.Rdata"))) {
-
-  all_beta_df <- orig_normal_mtx
-  all_beta_df$MPNST <- MPNST_df
-  all_beta_df$blood <- blood_mtx
-
-  all_beta_stats <- lapply(all_beta_df, function(x) {
-
-    return(
-      t(
-      	apply(x, 1, function(y) {
-          # calculate mean, 10% and 90% quartiles:
-          quantiles <- quantile(
-          	y, c(0.1, 0.25, 0.75, 0.9), na.rm = TRUE
-          )
-          return(
-            c(
-              median = median(y, na.rm = TRUE),
-              mean = mean(y, na.rm = TRUE), 
-              sd = sd(y, na.rm = TRUE),
-              quart_0.1 = quantiles[1],
-              quart_0.25 = quantiles[2],
-              quart_0.75 = quantiles[3],
-              quart_0.9 = quantiles[4]
-         	)
-          )
-        })
-      )
-    )
-
-  })
-
-#  ######
-#
-#  temp_beta_stats <- lapply(all_beta_df, function(x) {
-#
-#    return(
-#      t(
-#      	apply(x, 1, function(y) {
-#          # calculate mean, 10% and 90% quartiles:
-#          quantiles <- quantile(y, c(0.25, 0.75), na.rm = TRUE)
-#          return(
-#            c(
-#              quart_0.25 = quantiles[1],
-#              quart_0.75 = quantiles[2],
-#              median = median(y, na.rm = TRUE)
-#         	)
-#          )
-#        })
-#      )
-#    )
-#
-#  })
-#
-#  for (i in 1:length(all_beta_stats)) {
-#  	if (i==1) {
-#  	  all_beta_stats_temp <- list(
-#  	  	cbind(all_beta_stats[[i]], temp_beta_stats[[i]])
-#  	  )
-#  	} else {
-#  	  all_beta_stats_temp[[i]] <- cbind(all_beta_stats[[i]], temp_beta_stats[[i]])
-#  	}
-#  }
-#
-#  all_beta_stats <- all_beta_stats_temp
-#  names(all_beta_stats) <- names(all_beta_df)
-#  ######
-  
-  saveRDS(all_beta_stats, paste0(Robject_dir, "all_beta_stats.Rdata"))
-
-} else {
-
-  all_beta_stats <- readRDS(paste0(Robject_dir, "all_beta_stats.Rdata"))
-
-}
-
-# fetch sample numbers for tissues:
-n_vals <- c(
-  unlist(lapply(orig_normal_mtx, ncol)),
-  ncol(blood_mtx),
-  as.character(10),
-  ncol(MPNST_df)
-)
-names(n_vals)[length(n_vals)-2] <- "blood"
-names(n_vals)[length(n_vals)-1] <- "NF"
-names(n_vals)[length(n_vals)] <- "MPNST"
-
-# filter out tissues with < 10 samples from beta stats:
-rm_tissues <- names(n_vals)[as.numeric(n_vals) < plot_min_sample_no]
-plot_beta_stats <- all_beta_stats[
-  !(names(all_beta_stats) %in% rm_tissues)
-]
-
-# update names for n_vals to plot labels:
-m <- match(names(n_vals), tissue_key$code)
-names(n_vals) <- tissue_key$name[m]
-
-# fetch mean beta values, coords and overlapping genes for 
-# DM probes and plot:
-DMR_plot_df <- lapply(
-  DMR_final,
-  fetch_DM_beta,
-  plot_beta_stats,
-  probe_coords,
-  tissue_key
-)
-
-# save final nos:
-final_no <- lapply(DMR_final, nrow)
-
+# record and write values to file:
 DMR_record <- rbind(
   DMR_record,
-  t(
-    data.frame(
-      final_hyper = c(
-        rep(NA, (ncol(DMR_record)-1)),
-        final_no$hyper
-      ),
-      final_hypo = c(
-        rep(NA, (ncol(DMR_record)-1)),
-        final_no$hypo
-      )
-    )
+  record_vals(
+  	dmr = final_DMR, 
+  	label = "final",
+  	col_names = colnames(DMR_record)
   )
 )
 
@@ -712,13 +587,67 @@ write.table(
 
 
 ####################################################################################
-### 7. Plot top 10 DM probes ###
+### 6. Prepare plot data ###
 ####################################################################################
 
-# find and take top 10 candidates by beta difference for plot:
-DMR_top <- lapply(DMR_final, function(x) {
+# add all beta values to list:
+all_beta_list <- orig_normal_mtx
+all_beta_list$MPNST <- MPNST_df
+all_beta_list$blood <- blood_mtx
+
+# determine number of samples of each tissue:
+n_vals <- c(
+  unlist(lapply(orig_normal_mtx, ncol)),
+  ncol(blood_mtx),
+  as.character(10),
+  ncol(MPNST_df)
+)
+names(n_vals)[length(n_vals)-2] <- "blood"
+names(n_vals)[length(n_vals)-1] <- "NF"
+names(n_vals)[length(n_vals)] <- "MPNST"
+
+# update names for n_vals to plot labels:
+m <- match(names(n_vals), tissue_key$code)
+names(n_vals) <- tissue_key$name[m]
+
+# fetch beta value stats for DM probes:
+if (!file.exists(paste0(Robject_dir, "DMR_plot_df.Rdata"))) {
+
+  DMR_plot_df <- fetch_DM_beta(
+    dmr = final_DMR,
+    beta_val_list = all_beta_list,
+    probe_coords,
+    tissue_key,
+    n_vals,
+    plot_min_sample_no
+  )
+
+  saveRDS(DMR_plot_df, paste0(Robject_dir, "DMR_plot_df.Rdata"))
+
+} else {
+  DMR_plot_df <- readRDS(paste0(Robject_dir, "DMR_plot_df.Rdata"))
+}
+
+
+####################################################################################
+### 7. Plot top 10 and all DM probes ###
+####################################################################################
+
+# combine mean beta difference and adj p-values to order best 
+# candidates and take top 10 candidates for plot:
+DMR_top <- lapply(final_DMR, function(x) {
+
+  # calculate log fold change between groups:
+  log_fc <- log(x$mean.MPNST/x$mean.all.non.malig)
+
+  # use Xiao, Bioinformatics 2014 to combine log FC and p-values:
+  x$combined_score <- log_fc*(
+  	-log10(x$p.value.adj.MPNST.all.non.malig)
+  )
+
+  # order by combined score:
   ordered_x <- x[
-    order(abs(x$mean.MPNST.minus.mean.all.non.malig), decreasing = T), 
+    order(abs(x$combined_score), decreasing = T), 
   ]
   return(head(ordered_x, 10))
 })
@@ -726,251 +655,50 @@ DMR_top <- lapply(DMR_final, function(x) {
 DMR_plot_df_top <- DMR_plot_df
 
 for (i in 1:length(DMR_plot_df_top)) {
-
   DMR_plot_df_top[[i]] <- DMR_plot_df_top[[i]][
   	DMR_plot_df_top[[i]]$probe %in% DMR_top[[i]]$probe,
   ]
-
-  # determine whether any final candidates overlap genes:
-  top_DMR_genes <- DMR_genes[[i]][
-    DMR_genes[[i]]$probe %in% DMR_plot_df_top[[i]]$probe
-  ]
-  
 }
 
-# plot data:
-for (i in 1:length(DMR_plot_df_top)) {
+# plot both all and top 10 DM probes:
+plot_list <- list(
+  top_10 = DMR_plot_df_top,
+  all = DMR_plot_df
+)
 
-  # make tissue column factor and set MPNST as level 1:
-  nm_df <- DMR_plot_df_top[[i]][
-    !(DMR_plot_df_top[[i]]$tissue %in% c("MPNST", "NF", "blood")),
-  ]
-  nm_df <- nm_df[order(nm_df$tissue),]
+for (i in 1:length(plot_list)) {
 
-  # reorder so MPNST, NF and blood are top levels
-  nm_blood <- rbind(
-	DMR_plot_df_top[[i]][DMR_plot_df_top[[i]]$tissue == "blood",],
-	nm_df
-  )
-  nm_nf <- rbind(
-	DMR_plot_df_top[[i]][DMR_plot_df_top[[i]]$tissue == "NF",],
-	nm_blood
-  )
-  DMR_plot_df_top[[i]] <- rbind(
-	DMR_plot_df_top[[i]][DMR_plot_df_top[[i]]$tissue == "MPNST",],
-	nm_nf
-  )
+  for (j in 1:length(plot_list[[i]])) {
 
-  DMR_plot_df_top[[i]]$tissue <- factor(DMR_plot_df_top[[i]]$tissue,
-  	levels = unique(DMR_plot_df_top[[i]]$tissue))
-
-  # add no samples to legend:
-  legend_n_vals <- paste0(
-  	levels(DMR_plot_df_top[[i]]$tissue),
-  	" (",
-  	n_vals[levels(DMR_plot_df_top[[i]]$tissue)],
-  	")"
-  )
-
-  # update x_pos and make character factor:
-  DMR_plot_df_top[[i]] <- arrange(
-    DMR_plot_df_top[[i]], chr, coord
-  )
-  DMR_plot_df_top[[i]]$x_pos <- as.character(
-    rleid(DMR_plot_df_top[[i]]$probe)
-  )
-
-  # set up temp df for labels:
-  temp_df <- DMR_plot_df_top[[i]][
-    !duplicated(DMR_plot_df_top[[i]]$probe),
-  ]
-
-  # plot data:
-  p <- ggplot(
-    DMR_plot_df_top[[i]], 
-    aes(
-      x=x_pos, 
-      y=median, 
-      color=factor(
-      	tissue, labels = legend_n_vals
-      ),
-      group=shape
+    plot_DMR(
+      plot_df = plot_list[[i]][[j]],
+      dot_vals = "median",
+      bar_vals = "quartile",
+      plot_type = names(plot_list)[i],
+      meth_type = names(plot_list[[i]])[j],
+      probe_annot = FALSE
     )
-  )
-#  p <- p + geom_jitter(
-#  	aes(shape=shape),
-#  	size = 2, 
-#  	width = 0.1, 
-#  	height = 0
-#  )
-  p <- p + geom_pointrange(
-  	aes(ymin = quart_0.25, ymax = quart_0.75, shape=shape), 
-  	size = 0.5,
-    position=position_jitter(width=0.3, seed = 754)
-  )
-  p <- p + labs(color = "Tissue")
-#  p <- p + scale_x_discrete(
-#  	labels = c(
-#  	  "candidate 1", 
-#  	  seq(2, nrow(DMR_plot_df_top[[i]]), 1)
-#  	)
-#    labels = paste0(
-#      temp_df$probe, 
-#      "\n", 
-#      temp_df$chr,
-#      ":",
-#      temp_df$coord
-#    )
-#  )
-  p <- p + guides(shape = FALSE)
-  p <- p + xlab(
-  	paste0(
-  	  "CpG probes ", names(DMR_plot_df_top)[i], "methylated ",
-  	  "in MPNST"
-  	)
-  )
-  p <- p + ylab("Median methylation level")
-  p <- p + theme_cowplot(12)
-  p <- p + theme(
-    axis.text.x = element_text(angle = 45, hjust = 1)
-  )
-  p <- p + scale_color_manual(
-  	values = col_pal[1:length(unique(DMR_plot_df_top[[i]]$tissue)),1]
-  )
   
-  print(
-    paste0(
-      "Plotting candidates, filename = ", plot_dir, "MPNST_", names(DMR_plot_df_top)[i], "methylated_marker_probes.png"
+    plot_DMR(
+      plot_df = plot_list[[i]][[j]],
+      dot_vals = "median",
+      bar_vals = "wide_quartile",
+      plot_type = names(plot_list)[i],
+      meth_type = names(plot_list[[i]])[j],
+      probe_annot = FALSE
     )
-  )
-
-  png(
-  	paste0(
-  	  plot_dir, "top_10_MPNST_", names(DMR_plot_df_top)[i], 
-  	  "methylated_marker_probes_median_quartile_bars.png"
-  	),
-  	res = 300,
-  	unit = "in",
-  	height = 7,
-  	width = 15
-  )
-    print(p)
-  dev.off()
   
-  ggsave(
-    paste0(plot_dir, "top_10_MPNST_", names(DMR_plot_df_top)[i], 
-    	"methylated_marker_probes_median_quartile_bars.pdf"),
-    plot = p,
-    useDingbats = F,
-    width = 10
-  )
+    plot_DMR(
+      plot_df = plot_list[[i]][[j]],
+      dot_vals = "mean",
+      bar_vals = "sd",
+      plot_type = names(plot_list)[i],
+      meth_type = names(plot_list[[i]])[j],
+      probe_annot = FALSE
+    )
+  
+  }
 
 }
 
 
-####################################################################################
-### 6. Plot DM probes ###
-####################################################################################
-
-for (i in 1:length(DMR_plot_df)) {
-
-  # make tissue column factor and set MPNST as level 1:
-  nm_df <- DMR_plot_df[[i]][
-    !(DMR_plot_df[[i]]$tissue %in% c("MPNST", "NF")),
-  ]
-  nm_df <- nm_df[order(nm_df$tissue),]
-
-  nm_mpnst <- rbind(
-	DMR_plot_df[[i]][DMR_plot_df[[i]]$tissue == "MPNST",],
-	nm_df
-  )
-  DMR_plot_df[[i]] <- rbind(
-  	nm_mpnst,
-  	DMR_plot_df[[i]][DMR_plot_df[[i]]$tissue == "NF",]
-  )
-
-  DMR_plot_df[[i]]$tissue <- factor(DMR_plot_df[[i]]$tissue,
-  	levels = unique(DMR_plot_df[[i]]$tissue))
-
-  # add no samples to legend:
-  legend_n_vals <- paste0(
-  	levels(DMR_plot_df[[i]]$tissue),
-  	" (",
-  	n_vals[levels(DMR_plot_df[[i]]$tissue)],
-  	")"
-  )
-
-  # update x_pos and make character factor:
-  DMR_plot_df[[i]] <- arrange(
-    DMR_plot_df[[i]], chr, coord
-  )
-  DMR_plot_df[[i]]$x_pos <- as.character(
-    rleid(DMR_plot_df[[i]]$probe)
-  )
-
-  # set up temp df for labels:
-  temp_df <- DMR_plot_df[[i]][
-    !duplicated(DMR_plot_df[[i]]$probe),
-  ]
-
-  p <- ggplot(
-    DMR_plot_df[[i]], 
-    aes(x=x_pos, y=beta, color=tissue, group=shape)
-  )
-  p <- p + geom_jitter(
-  	aes(shape=shape),
-  	size = 2, 
-  	width = 0.1, 
-  	height = 0
-  )
-  p <- p + scale_x_discrete(
-    labels = paste0(
-      unique(DMR_plot_df[[i]]$probe), 
-      "\n", 
-      unique(DMR_plot_df[[i]]$chr),
-      ":",
-      unique(DMR_plot_df[[i]]$coord)
-    )
-  )
-  p <- p + xlab(
-  	paste0(
-  	  "CpG probes ", names(DMR_plot_df)[i], "methylated ",
-  	  "in MPNST"
-  	)
-  )
-  p <- p + ylab("Methylation level")
-  p <- p + theme_cowplot(12)
-  p <- p + theme(
-    axis.text.x = element_text(angle = 45, hjust = 1)
-  )
-  p <- p + scale_color_manual(
-  	values = col_pal[1:length(unique(DMR_plot_df[[i]]$tissue)),1]
-  )
-  
-  print(
-    paste0(
-      "Plotting candidates, filename = ", plot_dir, "MPNST_", names(DMR_plot_df)[i], "methylated_marker_probes.png"
-    )
-  )
-
-  png(
-  	paste0(
-  	  plot_dir, "MPNST_", names(DMR_plot_df)[i], 
-  	  "methylated_marker_probes.png"
-  	),
-  	res = 300,
-  	unit = "in",
-  	height = 7,
-  	width = 10
-  )
-    print(p)
-  dev.off()
-  
-  ggsave(
-    paste0(plot_dir, "MPNST_", names(DMR_plot_df)[i], 
-    	"methylated_marker_probes.pdf"),
-    plot = p,
-    useDingbats = F
-  )
-
-}

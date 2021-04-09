@@ -1,18 +1,30 @@
-record_vals <- function(dmr, label) {
+record_vals <- function(
+  dmr, 
+  label, 
+  col_names
+) {
 
+  # bind hyper and hypo candidates together:
   if ("hyper" %in% names(dmr)) {
 
-    record_obj <- rbind(
-      nrow(dmr$hyper$all_non_malig),
-      nrow(dmr$hypo$all_non_malig)
-    )
+    if ("all_non_malig" %in% names(dmr$hyper)) {
+      record_obj <- rbind(
+        nrow(dmr$hyper$all_non_malig),
+        nrow(dmr$hypo$all_non_malig)
+      )
+    } else {
+      record_obj <- rbind(
+        nrow(dmr$hyper),
+        nrow(dmr$hypo)
+      )
+    }
 
     # fill in other tissue values with NA:
     record_obj <- cbind(
-      data.frame(matrix(NA, nrow = 2, ncol = length(dmr$hyper)-1)),
+      data.frame(matrix(NA, nrow = 2, ncol = length(col_names)-1)),
       record_obj
     )
-    colnames(record_obj) <- names(dmr$hyper)
+    colnames(record_obj) <- col_names
 
   } else {
 
