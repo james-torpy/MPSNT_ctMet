@@ -4,6 +4,7 @@ DMR_analysis <- function(
   sample2_beta,
   sample2_name,
   row_ranges,
+  min_sample_per_probe,
   plot_dir
 ) {
 
@@ -20,7 +21,7 @@ DMR_analysis <- function(
     sample2_beta = as.matrix(sample2_beta)
   )
   
-  # remove rows with < in_sample_per_probe samples not NA:
+  # remove rows with < min_sample_per_probe samples not NA:
   filt_mtx <- lapply(unfilt_mtx, function(x) {
     
     return(
@@ -58,18 +59,21 @@ DMR_analysis <- function(
     )
   )
   
-  res <- TCGAanalyze_DMC(
-    data = final_se,
-    groupCol = "tissue",
-    group1 = sample1_name,
-    group2 = sample2_name,
-    plot.filename = paste0(
-    	plot_dir, 
-    	sample1_name, 
-    	"_vs_", 
-    	sample2_name,
-    	"_DMR_volcano.png"
-    )
+  res <- list(
+    DMR = TCGAanalyze_DMC(
+      data = final_se,
+      groupCol = "tissue",
+      group1 = sample1_name,
+      group2 = sample2_name,
+      plot.filename = paste0(
+      	plot_dir, 
+      	sample1_name, 
+      	"_vs_", 
+      	sample2_name,
+      	"_DMR_volcano.png"
+      )
+    ),
+    filtered_probes = nrow(beta_mtx)
   )
 
 }

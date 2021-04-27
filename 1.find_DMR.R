@@ -1,27 +1,29 @@
 
-# define parameters
 min_sample_per_probe <- 5
-min_beta_val <- 0.2
 subset_data <- TRUE
 
 ## fetch other variables:
 #args = commandArgs(trailingOnly=TRUE)
 #
-#beta_cutoff <- args[1]
+#merge_tissues_min <- args[1]
+#beta_cutoff <- args[2]
 #print(beta_cutoff)
-#pval_cutoff <- as.character(args[2])
-#background_cutoff <- args[3]
+#pval_cutoff <- as.character(args[3])
+#background_cutoff <- args[4]
 #blood_cutoffs <- list(
-#  MPNST_hypermethylated = args[4],
-#  MPNST_hypomethylated = args[5]
+#  MPNST_hypermethylated = args[5],
+#  MPNST_hypomethylated = args[6]
 #)
 #NF_cutoffs <- list(
-#  MPNST_hypermethylated = args[6],
-#  MPNST_hypomethylated = args[7]
+#  MPNST_hypermethylated = args[7],
+#  MPNST_hypomethylated = args[8]
 #)
-#check_indiv_tissue <- as.logical(args[8])
-#plot_min_sample_no <- as.numeric(args[9])
+#check_indiv_tissue <- as.logical(args[9])
+#plot_min_sample_no <- as.numeric(args[10])
 
+## @knitr merge_tissues_min
+
+merge_tissues_min <- 5
 beta_cutoff <- 0.35
 pval_cutoff <- as.character("1e-5")
 background_cutoff <- 0.2
@@ -39,8 +41,20 @@ plot_min_sample_no <- 10
 print(paste0("beta_cutoff = ", beta_cutoff))
 print(paste0("pval_cutoff = ", pval_cutoff))
 print(paste0("background_cutoff = ", background_cutoff))
-print(paste0("blood_cutoffs = ", blood_cutoffs$MPNST_hypermethylated, ", ", blood_cutoffs$MPNST_hypomethylated))
-print(paste0("NF_cutoffs = ", NF_cutoffs$MPNST_hypermethylated, ", ", NF_cutoffs$MPNST_hypermethylated))
+print(
+  paste0(
+    "blood_cutoffs = ", 
+    blood_cutoffs$MPNST_hypermethylated, ", ", 
+    blood_cutoffs$MPNST_hypomethylated
+  )
+)
+print(
+  paste0(
+    "NF_cutoffs = ", 
+    NF_cutoffs$MPNST_hypermethylated, ", ", 
+    NF_cutoffs$MPNST_hypermethylated
+  )
+)
 
 # define tissues:
 tissue_key <- data.frame(
@@ -77,7 +91,7 @@ ref_dir <- paste0(project_dir, "refs/")
 
 normal_in <- paste0(raw_dir, "TCGA_normal/")
 Robject_in <- paste0(raw_dir, "Rdata/")
-result_dir <- paste0(project_dir, "results/")
+result_dir <- paste0(project_dir, "results2/")
 out_path <- paste0(
   result_dir,
   "beta_", beta_cutoff, "_",
@@ -206,7 +220,7 @@ if (exists("mixed_mtx")) {
 
 for (i in 1:length(orig_normal_mtx)) {
 
-  if (ncol(orig_normal_mtx[[i]]) < 5) {
+  if (ncol(orig_normal_mtx[[i]]) < merge_tissues_min) {
 
   	if (!exists("mixed_mtx")) {
   	  mixed_mtx <- orig_normal_mtx[[i]]
