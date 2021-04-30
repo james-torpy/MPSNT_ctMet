@@ -139,35 +139,35 @@ print(
 )
 
 
-#####################################################################################
-#### 2. Filter DM probes by beta/pvals ###
-#####################################################################################
-#
-#print(
-#  paste0(
-#    "Filtering for canditates with at least ", 
-#    beta_cutoff, 
-#    " beta value difference and < ", pval_cutoff, "p-value..."
-#  )
-#)
-#
-#DMR_initial <- lapply(
-#  MPNST_vs_normal,
-#  DMR_filter,
-#  beta_cutoff,
-#  as.numeric(pval_cutoff)
-#)
-#
-## record values:
-#DMR_record <- rbind(
-#  DMR_record,
-#  record_vals(DMR_initial, "beta_filt")
-#)
-#
-#
-#####################################################################################
-#### 2. Filter DM probes for low background candidates ###
-#####################################################################################
+####################################################################################
+### 2. Filter DM probes by beta/pvals ###
+####################################################################################
+
+print(
+  paste0(
+    "Filtering for canditates with at least ", 
+    beta_cutoff, 
+    " beta value difference and < ", pval_cutoff, "p-value..."
+  )
+)
+
+DMR_initial <- lapply(
+  MPNST_vs_normal,
+  DMR_filter,
+  beta_cutoff,
+  as.numeric(pval_cutoff)
+)
+
+# record values:
+DMR_record <- rbind(
+  DMR_record,
+  record_vals(DMR_initial, "beta_filt")
+)
+
+
+####################################################################################
+### 2. Filter DM probes for low background candidates ###
+####################################################################################
 #
 #print(
 #  paste0(

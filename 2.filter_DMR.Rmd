@@ -1,0 +1,232 @@
+
+---
+title: "MPNST DMR report"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: html_document
+---
+
+
+```{r include = FALSE}
+
+# to knit document:
+#library(rmarkdown)
+#rmarkdown::render(
+#  "/share/ScratchGeneral/jamtor/projects/MPNST_ctMet/scripts/2.filter_DMR.Rmd", 
+#  output_file="/share/ScratchGeneral/jamtor/projects/MPNST_ctMet/results2/MPNST_DMR_report.html"
+#)
+
+subset_data <- TRUE
+min_sample_per_probe <- 5
+beta_cutoff <- 0.35
+pval_cutoff <- as.character("1e-5")
+background_cutoff <- 0.2
+blood_cutoffs <- list(
+  MPNST_hypermethylated = 0.2,
+  MPNST_hypomethylated = 0.8
+)
+NF_cutoffs <- list(
+  MPNST_hypermethylated = 0.2,
+  MPNST_hypomethylated = 0.8
+)
+check_indiv_tissue <- as.logical("FALSE")
+plot_min_sample_no <- 10
+
+# define tissues:
+tissue_key <- data.frame(
+  code = c(
+    "BLCA_non_malig", "blood", "BRCA_non_malig", 
+    "CESC_non_malig", "CHOL_non_malig", "COAD_non_malig", 
+    "ESCA_non_malig", "HNSC_non_malig", "KIRP_non_malig", 
+    "LIHC_non_malig", "LUAD_non_malig", "LUSC_non_malig", 
+    "mixed_non_malig", "MPNST", "NF", 
+    "PAAD_non_malig", "PRAD_non_malig", "READ_non_malig", 
+    "SARC_non_malig", "STAD_non_malig", "THCA_non_malig", 
+    "THYM_non_malig"
+  ),
+  name = c(
+    "bladder", "blood", "breast",
+    "cervical", "bile duct", "colon",
+    "esophagus", "head/neck", "kidney",
+    "liver", "lung", "lung",
+    "mixed", "MPNST", "NF", 
+    "pancreas", "prostate", "rectum", 
+    "sarcoma", "stomach", "thyroid", 
+    "thymus"
+  )
+)
+
+# define and create directories:
+home_dir <- "/share/ScratchGeneral/jamtor/"
+project_dir <- paste0(home_dir, "projects/MPNST_ctMet/")
+script_dir <- paste0(project_dir, "scripts/")
+func_dir <- paste0(script_dir, "functions/")
+genome_dir <- paste0(project_dir, "genome/")
+ref_dir <- paste0(project_dir, "refs/")
+
+result_dir <- paste0(project_dir, "results2/")
+Robject_in <- paste0(result_dir, "DMR/Rdata/")
+out_path <- paste0(
+  result_dir,
+  "DMR/",
+  "beta_", beta_cutoff, "_",
+  "pval_", pval_cutoff, "/",
+  "background_", background_cutoff, "/",
+  "blood_hypo_", blood_cutoffs$MPNST_hypermethylated, "_",
+  "blood_hyper_", blood_cutoffs$MPNST_hypomethylated, "/"
+)
+
+if (!is.na(NF_cutoffs[1])) {
+  out_path <- paste0(
+  	out_path, "NF_hypo_", NF_cutoffs$MPNST_hypermethylated,
+  	"_NF_hyper_", NF_cutoffs$MPNST_hypomethylated, "/"
+  )
+}
+
+if (subset_data) {
+  result_dir <- paste0(result_dir, "subset/")
+  out_path <- paste0(out_path, "subset/")
+}
+
+Robject_dir <- paste0(result_dir, "Rdata/")
+plot_dir <- paste0(out_path, "plots/")
+table_dir <- paste0(out_path, "tables/")
+
+system(paste0("mkdir -p ", Robject_dir))
+system(paste0("mkdir -p ", plot_dir))
+system(paste0("mkdir -p ", table_dir))
+
+print(
+  paste0(
+    "Output candidate plots are in ", 
+    plot_dir
+  )
+)
+
+
+####################################################################################
+### 0. Load functions ###
+####################################################################################
+
+firstup <- function(x) {
+  substr(x, 1, 1) <- toupper(substr(x, 1, 1))
+  x
+}
+
+
+
+```
+
+<br />
+The following **450k methylation array** data was downloaded:
+
+
+```{r echo = FALSE}
+
+####################################################################################
+### 1. Load and print sample and DMR info ###
+####################################################################################
+
+DMR_list <- readRDS(paste0(Robject_in, "MPNST_vs_normal_groups.Rdata"))
+colnames(DMR_list$sample_summary) <- gsub(
+  "_", " ", colnames(DMR_list$sample_summary)
+)
+
+library(knitr)
+
+kable(DMR_list$sample_summary)
+
+library(stringr)
+merged_tissue_text <- firstup(paste(DMR_list$merged_tissues, collapse = ", "))
+
+
+```
+
+<br />
+Original no. probes in non-malignant data = **`r DMR_list$non_malig_probes`**  \
+
+Original no. probes in MPNST data = **`r DMR_list$MPNST_probes`**  \
+
+**`r DMR_list$common_probes`** probes were present in both MPNST and non-malignant 
+data and kept for analysis.  \ 
+
+```{r eval = FALSE}
+
+#<br />
+#**`r merged_tissue_text`** data were merged as there were **< 5** samples per tissue, 
+#creating a 'mixed tissue' group with `r DMR_list$mixed_no` samples.  \ 
+
+```
+
+```{r echo = FALSE}
+
+# record DMR values:
+DMR_record <- as.data.frame(
+  rbind(
+    sapply(DMR_list$MPNST_vs_normal, function(x) {
+      nrow(
+        x[x$status == "Hypermethylated in MPNST",]
+      )
+    }), 
+    sapply(DMR_list$MPNST_vs_normal, function(x) {
+      nrow(
+        x[x$status == "Hypomethylated in MPNST",]
+      )
+    })
+  )
+)
+rownames(DMR_record) <- c("unfiltered_hyper", "unfiltered_hypo")
+
+```
+
+#<br />
+**`r print(DMR_record["unfiltered_hyper",]$all_non_malig)`** hypermethylated and
+**`r print(DMR_record["unfiltered_hypo",]$all_non_malig)`** hypomethylated unfiltered 
+candidates initially identified between the MPNST and non-malignant array data.
+
+
+```{r, echo = FALSE}
+
+####################################################################################
+### 2. Filter by pval and beta difference ###
+####################################################################################
+
+print(
+  paste0(
+    "Filtering for canditates with at least ", 
+    beta_cutoff, 
+    " beta value difference and < ", pval_cutoff, "p-value..."
+  )
+)
+
+# load function:
+dget(paste0(func_dir, "DMR_filter.R"))
+dget(paste0(func_dir, "record_vals.R"))
+
+# filter:
+DMR_initial <- lapply(
+  MPNST_vs_normal,
+  DMR_filter,
+  beta_cutoff,
+  as.numeric(pval_cutoff)
+)
+
+# record values:
+DMR_record <- rbind(
+  DMR_record,
+  record_vals(DMR_initial, "beta_filt")
+)
+
+```
+
+#<br />
+Differentially methylated candidates with at least **`r print(beta_cutoff)`** difference 
+in mean beta value and p-values < **`r print(pval_cutoff)`** were kept.
+This left **`r print(DMR_record["",]$all_non_malig)`** hypermethylated and
+**`r print(DMR_record["",]$all_non_malig)`** hypomethylated
+
+
+
+
+
+
+
